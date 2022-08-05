@@ -6,7 +6,7 @@ from .sampling_result import SamplingResult
 
 
 @BBOX_SAMPLERS.register_module()
-class PseudoSampler(BaseSampler):
+class YOLOV5Sampler(BaseSampler):
     """A pseudo sampler that does not do sampling actually."""
 
     def __init__(self, **kwargs):
@@ -20,14 +20,12 @@ class PseudoSampler(BaseSampler):
         """Sample negative samples."""
         raise NotImplementedError
 
-    def sample(self, assign_result, bboxes, gt_bboxes, *args, **kwargs):
+    def sample(self, assign_result, bboxes, gt_bboxes, **kwargs):
         """Directly returns the positive and negative indices  of samples.
-
         Args:
             assign_result (:obj:`AssignResult`): Assigned results
             bboxes (torch.Tensor): Bounding boxes
             gt_bboxes (torch.Tensor): Ground truth boxes
-
         Returns:
             :obj:`SamplingResult`: sampler results
         """

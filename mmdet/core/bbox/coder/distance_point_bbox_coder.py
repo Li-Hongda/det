@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 from ..builder import BBOX_CODERS
 from ..transforms import bbox2distance, distance2bbox
 from .base_bbox_coder import BaseBBoxCoder

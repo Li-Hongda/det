@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 
 import mmcv
@@ -606,55 +605,6 @@ class SSDAnchorGenerator(AnchorGenerator):
         return repr_str
 
 
-@PRIOR_GENERATORS.register_module()
-class LegacyAnchorGenerator(AnchorGenerator):
-    """Legacy anchor generator used in MMDetection V1.x.
-
-    Note:
-        Difference to the V2.0 anchor generator:
-
-        1. The center offset of V1.x anchors are set to be 0.5 rather than 0.
-        2. The width/height are minused by 1 when calculating the anchors' \
-            centers and corners to meet the V1.x coordinate system.
-        3. The anchors' corners are quantized.
-
-    Args:
-        strides (list[int] | list[tuple[int]]): Strides of anchors
-            in multiple feature levels.
-        ratios (list[float]): The list of ratios between the height and width
-            of anchors in a single level.
-        scales (list[int] | None): Anchor scales for anchors in a single level.
-            It cannot be set at the same time if `octave_base_scale` and
-            `scales_per_octave` are set.
-        base_sizes (list[int]): The basic sizes of anchors in multiple levels.
-            If None is given, strides will be used to generate base_sizes.
-        scale_major (bool): Whether to multiply scales first when generating
-            base anchors. If true, the anchors in the same row will have the
-            same scales. By default it is True in V2.0
-        octave_base_scale (int): The base scale of octave.
-        scales_per_octave (int): Number of scales for each octave.
-            `octave_base_scale` and `scales_per_octave` are usually used in
-            retinanet and the `scales` should be None when they are set.
-        centers (list[tuple[float, float]] | None): The centers of the anchor
-            relative to the feature grid center in multiple feature levels.
-            By default it is set to be None and not used. It a list of float
-            is given, this list will be used to shift the centers of anchors.
-        center_offset (float): The offset of center in proportion to anchors'
-            width and height. By default it is 0.5 in V2.0 but it should be 0.5
-            in v1.x models.
-
-    Examples:
-        >>> from mmdet.core import LegacyAnchorGenerator
-        >>> self = LegacyAnchorGenerator(
-        >>>     [16], [1.], [1.], [9], center_offset=0.5)
-        >>> all_anchors = self.grid_anchors(((2, 2),), device='cpu')
-        >>> print(all_anchors)
-        [tensor([[ 0.,  0.,  8.,  8.],
-                [16.,  0., 24.,  8.],
-                [ 0., 16.,  8., 24.],
-                [16., 16., 24., 24.]])]
-    """
-
     def gen_single_level_base_anchors(self,
                                       base_size,
                                       scales,
@@ -704,30 +654,6 @@ class LegacyAnchorGenerator(AnchorGenerator):
 
         return base_anchors
 
-
-@PRIOR_GENERATORS.register_module()
-class LegacySSDAnchorGenerator(SSDAnchorGenerator, LegacyAnchorGenerator):
-    """Legacy anchor generator used in MMDetection V1.x.
-
-    The difference between `LegacySSDAnchorGenerator` and `SSDAnchorGenerator`
-    can be found in `LegacyAnchorGenerator`.
-    """
-
-    def __init__(self,
-                 strides,
-                 ratios,
-                 basesize_ratio_range,
-                 input_size=300,
-                 scale_major=True):
-        super(LegacySSDAnchorGenerator, self).__init__(
-            strides=strides,
-            ratios=ratios,
-            basesize_ratio_range=basesize_ratio_range,
-            input_size=input_size,
-            scale_major=scale_major)
-        self.centers = [((stride - 1) / 2., (stride - 1) / 2.)
-                        for stride in strides]
-        self.base_anchors = self.gen_base_anchors()
 
 
 @PRIOR_GENERATORS.register_module()
@@ -990,8 +916,8 @@ class YOLOV5AnchorGenerator(AnchorGenerator):
         gt_bboxes_grid_x = gt_bboxes_cx / stride[0]
         gt_bboxes_grid_y = gt_bboxes_cy / stride[1]
         gt_pairs = torch.stack((gt_bboxes_grid_x,gt_bboxes_grid_y),dim=1)
-        offsets = torch.as_tensor([[0,0],[1,0],[0,1]]).to(device)
-        gt_bboxes_grid_idx = torch.zeros(0).to(device)
+        offsets = torch.as_tensor([[0,0],[1,0],[0,1]],device=device)
+        gt_bboxes_grid_idx = torch.zeros(0,device = device)
         for i in range(len(offsets)):
             # grid中心点位于上/半下象限或左/右半象限，则上/下侧或左/右侧的grid也负责预测
             gt_offsets_pairs = torch.where(gt_pairs % 1 > 0.5, 1, -1) * offsets[i]
@@ -1002,13 +928,7 @@ class YOLOV5AnchorGenerator(AnchorGenerator):
                 if gt_offsets_idx[idx] > feat_w * feat_h or gt_offsets_idx[idx] < 0:
                     gt_offsets_idx[idx] = torch.floor(gt_pairs)[idx, 1] * \
                         feat_w + torch.floor(gt_pairs)[idx, 0]
-            # invalid_upper_idx = torch.nonzero(gt_offsets_idx > feat_w * feat_h).squeeze()
-            # invalid_lower_idx = torch.nonzero(gt_offsets_idx > feat_w * feat_h).squeeze()
-            # for idx in gt
-            # invalid_idx = torch.nonzero(
-            #     torch.where(gt_offsets_idx > feat_w * feat_h, 1, 0) + \
-            #     torch.where(gt_offsets_idx < 0, 1, 0)
-            # )
+
             gt_bboxes_grid_idx = torch.cat((gt_bboxes_grid_idx,gt_offsets_idx),dim=1)
 
 
@@ -1073,8 +993,10 @@ class YOLOV5AnchorGenerator(AnchorGenerator):
         gt_bboxes_h = (gt_bboxes[:, 3] - gt_bboxes[:, 1]).to(device)
         bboxes_w = (bboxes[:, 2] - bboxes[:, 0]).to(device)
         bboxes_h = (bboxes[:, 3] - bboxes[:, 1]).to(device)
-        scale_w = gt_bboxes_w.view(-1,1).expand(num_gt,num_base_anchors).contiguous() / bboxes_w.view(1,-1).expand(num_gt,num_base_anchors).contiguous()
-        scale_h = gt_bboxes_h.view(-1,1).expand(num_gt,num_base_anchors).contiguous() / bboxes_h.view(1,-1).expand(num_gt,num_base_anchors).contiguous()
+        scale_w = gt_bboxes_w.view(-1,1).expand(num_gt,num_base_anchors).contiguous() / \
+            bboxes_w.view(1,-1).expand(num_gt,num_base_anchors).contiguous()
+        scale_h = gt_bboxes_h.view(-1,1).expand(num_gt,num_base_anchors).contiguous() / \
+            bboxes_h.view(1,-1).expand(num_gt,num_base_anchors).contiguous()
         valid_grid = (torch.max(scale_w,1 / scale_w) < 4) & (torch.max(scale_h,1 / scale_h) < 4)
 
         valid_grid = valid_grid.repeat(1, feat_h * feat_w)

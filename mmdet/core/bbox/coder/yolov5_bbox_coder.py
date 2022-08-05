@@ -6,14 +6,12 @@ from .base_bbox_coder import BaseBBoxCoder
 
 
 @BBOX_CODERS.register_module()
-class YOLOBBoxCoder(BaseBBoxCoder):
+class YOLOV5BBoxCoder(BaseBBoxCoder):
     """YOLO BBox coder.
-
     Following `YOLO <https://arxiv.org/abs/1506.02640>`_, this coder divide
     image into grids, and encode bbox (x1, y1, x2, y2) into (cx, cy, dw, dh).
     cx, cy in [0., 1.], denotes relative center position w.r.t the center of
     bboxes. dw, dh are the same as :obj:`DeltaXYWHBBoxCoder`.
-
     Args:
         eps (float): Min value of cx, cy when encoding.
     """
@@ -26,13 +24,11 @@ class YOLOBBoxCoder(BaseBBoxCoder):
     def encode(self, bboxes, gt_bboxes, stride):
         """Get box regression transformation deltas that can be used to
         transform the ``bboxes`` into the ``gt_bboxes``.
-
         Args:
             bboxes (torch.Tensor): Source boxes, e.g., anchors.
             gt_bboxes (torch.Tensor): Target of the transformation, e.g.,
                 ground-truth boxes.
             stride (torch.Tensor | int): Stride of bboxes.
-
         Returns:
             torch.Tensor: Box transformation deltas
         """
@@ -60,20 +56,20 @@ class YOLOBBoxCoder(BaseBBoxCoder):
     @mmcv.jit(coderize=True)
     def decode(self, bboxes, pred_bboxes, stride):
         """Apply transformation `pred_bboxes` to `boxes`.
-
         Args:
             boxes (torch.Tensor): Basic boxes, e.g. anchors.
             pred_bboxes (torch.Tensor): Encoded boxes with shape
             stride (torch.Tensor | int): Strides of bboxes.
-
         Returns:
             torch.Tensor: Decoded boxes.
         """
+        assert pred_bboxes.size(0) == bboxes.size(0)
         assert pred_bboxes.size(-1) == bboxes.size(-1) == 4
+
         xy_centers = (bboxes[..., :2] + bboxes[..., 2:]) * 0.5 + (
-            pred_bboxes[..., :2] - 0.5) * stride
+            pred_bboxes[..., :2] - 0.5) * 2 * stride
         whs = (bboxes[..., 2:] -
-               bboxes[..., :2]) * 0.5 * pred_bboxes[..., 2:].exp()
+               bboxes[..., :2]) * 0.5 * (pred_bboxes[..., 2:].sigmoid() * 2) ** 2
         decoded_bboxes = torch.stack(
             (xy_centers[..., 0] - whs[..., 0], xy_centers[..., 1] -
              whs[..., 1], xy_centers[..., 0] + whs[..., 0],
