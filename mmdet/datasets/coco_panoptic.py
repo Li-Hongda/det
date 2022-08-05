@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import itertools
 import os
 from collections import defaultdict

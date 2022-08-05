@@ -1,4 +1,3 @@
-# Copyright (c) OpenMMLab. All rights reserved.
 import contextlib
 import io
 import itertools
