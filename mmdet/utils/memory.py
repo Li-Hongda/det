@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import warnings
 from collections import abc
 from contextlib import contextmanager

@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 """Get test image metas on a specific dataset.
 
 Here is an example to run this script.

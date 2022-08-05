@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from mmcv.runner.hooks import HOOKS, Hook
 
 

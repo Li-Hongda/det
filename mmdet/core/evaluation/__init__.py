@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from .class_names import (cityscapes_classes, coco_classes, dataset_aliases,
                           get_classes, imagenet_det_classes,
                           imagenet_vid_classes, oid_challenge_classes,

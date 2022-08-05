@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from .collect_env import collect_env
 from .compat_config import compat_cfg
 from .logger import get_caller_name, get_root_logger, log_img_scale

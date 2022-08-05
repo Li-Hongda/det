@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 import json
 
 from mmcv.runner import DefaultOptimizerConstructor, get_dist_info

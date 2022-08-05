@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 
 # Copyright (c) 2018, Alexander Kirillov
 # This file supports `file_client` for `panopticapi`,

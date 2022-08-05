@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 """Optimize anchor settings on a specific dataset.
 
 This script provides two method to optimize YOLO anchors including k-means

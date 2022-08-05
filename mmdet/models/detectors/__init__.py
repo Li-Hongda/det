@@ -1,4 +1,4 @@
-# Copyright (c) OpenMMLab. All rights reserved.
+
 from .atss import ATSS
 from .autoassign import AutoAssign
 from .base import BaseDetector
