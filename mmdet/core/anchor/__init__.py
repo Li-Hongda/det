@@ -10,5 +10,6 @@ __all__ = [
     'AnchorGenerator', 'LegacyAnchorGenerator', 'anchor_inside_flags',
     'PointGenerator', 'images_to_levels', 'calc_region',
     'build_anchor_generator', 'ANCHOR_GENERATORS', 'YOLOAnchorGenerator',
-    'build_prior_generator', 'PRIOR_GENERATORS', 'MlvlPointGenerator'
+    'build_prior_generator', 'PRIOR_GENERATORS', 'MlvlPointGenerator',
+    'YOLOV5AnchorGenerator',
 ]
