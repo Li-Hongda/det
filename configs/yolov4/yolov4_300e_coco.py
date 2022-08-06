@@ -4,18 +4,18 @@ img_scale = (640, 640)  # height, width
 
 # model settings
 model = dict(
-    type='YOLOV5',
+    type='YOLOV4',
     input_size=img_scale,
     random_size_range=(15, 25),
     random_size_interval=10,
-    backbone=dict(type='YOLOV5CSPDarknet', deepen_factor=0.33, widen_factor=0.5),
+    backbone=dict(type='YOLOV4CSPDarknet'),
     neck=dict(
-        type='YOLOV5Neck',
-        in_channels=[256, 512, 1024],
-        out_channels=[256, 512, 1024],
+        type='YOLOV4Neck',
+        in_channels=[128, 256, 512],
+        out_channels=[128, 256, 512],
         num_csp_blocks=1),
     bbox_head=dict(
-        type='YOLOV5Head', num_classes=80, in_channels=128, feat_channels=128),
+        type='YOLOV4Head', num_classes=80, in_channels=128, feat_channels=128),
     train_cfg=dict(assigner=dict(type='YOLOV5Assigner'),sampler=dict(type='YOLOV5Sampler')),
     # In order to align the source code, the threshold of the val phase is
     # 0.01, and the threshold of the test phase is 0.001.

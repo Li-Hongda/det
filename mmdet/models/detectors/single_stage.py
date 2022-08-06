@@ -1,8 +1,5 @@
-
 import warnings
-
 import torch
-
 from mmdet.core import bbox2result
 from ..builder import DETECTORS, build_backbone, build_head, build_neck
 from .base import BaseDetector
@@ -138,34 +135,3 @@ class SingleStageDetector(BaseDetector):
         ]
         return bbox_results
 
-    def onnx_export(self, img, img_metas, with_nms=True):
-        """Test function without test time augmentation.
-
-        Args:
-            img (torch.Tensor): input images.
-            img_metas (list[dict]): List of image information.
-
-        Returns:
-            tuple[Tensor, Tensor]: dets of shape [N, num_det, 5]
-                and class labels of shape [N, num_det].
-        """
-        x = self.extract_feat(img)
-        outs = self.bbox_head(x)
-        # get origin input shape to support onnx dynamic shape
-
-        # get shape as tensor
-        img_shape = torch._shape_as_tensor(img)[2:]
-        img_metas[0]['img_shape_for_onnx'] = img_shape
-        # get pad input shape to support onnx dynamic shape for exporting
-        # `CornerNet` and `CentripetalNet`, which 'pad_shape' is used
-        # for inference
-        img_metas[0]['pad_shape_for_onnx'] = img_shape
-
-        if len(outs) == 2:
-            # add dummy score_factor
-            outs = (*outs, None)
-        # TODO Can we change to `get_bboxes` when `onnx_export` fail
-        det_bboxes, det_labels = self.bbox_head.onnx_export(
-            *outs, img_metas, with_nms=with_nms)
-
-        return det_bboxes, det_labels

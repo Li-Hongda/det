@@ -5,7 +5,7 @@ from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule
 from mmcv.runner import BaseModule
 from ..builder import NECKS
 
-class CBLBlock(BaseModule):
+class CBLNeckBlock(BaseModule):
     """CBL(Conv-BN-LeakyReLU) Block used in YOLOV4 neck,differs from 
     backbone.
     Args:
@@ -85,8 +85,6 @@ class YOLOV4Neck(BaseModule):
             Default: dict(type='LeakyReLU')
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None.
-    Example:
-            Input: [n,52,52,128],[n,26,26,256],[n,13,13,512]
     """
 
     def __init__(self,
@@ -123,7 +121,7 @@ class YOLOV4Neck(BaseModule):
                     1,
                     **cfg))
             self.top_down_blocks.append(
-                CBLBlock(
+                CBLNeckBlock(
                     in_channels[idx],
                     in_channels[idx - 1],
                     **cfg))
@@ -141,20 +139,13 @@ class YOLOV4Neck(BaseModule):
                     padding=1,
                     **cfg))
             self.bottom_up_blocks.append(
-                CBLBlock(
+                CBLNeckBlock(
                     in_channels[idx + 1] * 2,
                     out_channels[idx + 1],
                     **cfg))
 
 
     def forward(self, inputs):
-        """
-        Args:
-            inputs (tuple[Tensor]): input features.
-
-        Returns:
-            tuple[Tensor]: YOLOXPAFPN features.
-        """
         assert len(inputs) == len(self.in_channels)
 
         # top-down path
@@ -164,7 +155,6 @@ class YOLOV4Neck(BaseModule):
             feat_low = inputs[idx - 1]
             feat_heigh = self.reduce_layers[len(self.in_channels) - 1 - idx](
                 feat_heigh)
-            inner_outs[0] = feat_heigh
 
             upsample_feat = self.upsample(feat_heigh)
 
@@ -181,9 +171,5 @@ class YOLOV4Neck(BaseModule):
             out = self.bottom_up_blocks[idx](
                 torch.cat([downsample_feat, feat_height], 1))
             outs.append(out)
-
-        # out convs
-        for idx, conv in enumerate(self.out_convs):
-            outs[idx] = conv(outs[idx])
 
         return tuple(outs)

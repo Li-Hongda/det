@@ -154,10 +154,6 @@ class YOLOV5ResUnit(BaseModule):
     """The basic residual unit used in YOLOV5-v6.1 CSPBlock.
     Args:
         in_channels (int): The input channels of this Module.
-        out_channels (int): The output channels of this Module.
-        expansion (int): The kernel size of the convolution. Default: 0.5
-        add_identity (bool): Whether to add identity to the out.
-            Default: True
         use_depthwise (bool): Whether to use depthwise separable convolution.
             Default: False
         conv_cfg (dict): Config dict for convolution layer. Default: None,
@@ -170,42 +166,31 @@ class YOLOV5ResUnit(BaseModule):
 
     def __init__(self,
                 in_channels,
-                out_channels,
-                expansion=0.5,
-                add_identity=True,
                 use_depthwise=False,
                 conv_cfg=None,
                 norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
                 act_cfg=dict(type='Swish'),
                 init_cfg=None):
         super().__init__(init_cfg)
-        mid_channels = int(out_channels * expansion)
         conv = DepthwiseSeparableConvModule if use_depthwise else ConvModule
         cfg = dict(conv_cfg=conv_cfg, norm_cfg=norm_cfg, act_cfg=act_cfg)
         self.conv1 = ConvModule(
             in_channels,
-            mid_channels,
+            in_channels,
             kernel_size=1,
             **cfg)
         self.conv2 = conv(
-            mid_channels,
-            out_channels,
+            in_channels,
+            in_channels,
             kernel_size=3,
             stride=1,
             padding=1,
             **cfg)
-        self.add_identity = \
-            add_identity and in_channels == out_channels
 
     def forward(self, x):
-        identity = x
         out = self.conv1(x)
         out = self.conv2(out)
-
-        if self.add_identity:
-            return out + identity
-        else:
-            return out
+        return out + x
 
 class YOLOV5CSPBlock(BaseModule):
     """Cross Stage Partial Block used in YOLOV5-v6.1.
@@ -216,8 +201,6 @@ class YOLOV5CSPBlock(BaseModule):
         expansion (float): Ratio to adjust the number of channels of the
             hidden layer. Default: 0.5
         num_blocks (int): Number of blocks. Default: 1
-        add_identity (bool): Whether to add identity in blocks.
-            Default: True
         use_depthwise (bool): Whether to depthwise separable convolution in
             blocks. Default: False
         conv_cfg (dict, optional): Config dict for convolution layer.
@@ -233,7 +216,6 @@ class YOLOV5CSPBlock(BaseModule):
                  out_channels,
                  expansion=0.5,
                  num_blocks=1,
-                 add_identity=True,
                  use_depthwise=False,
                  conv_cfg=None,
                  norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
@@ -269,9 +251,7 @@ class YOLOV5CSPBlock(BaseModule):
         self.blocks = nn.Sequential(*[
             YOLOV5ResUnit(
                 mid_channels,
-                mid_channels,
                 1.0,
-                add_identity,
                 use_depthwise,
                 **cfg) for _ in range(num_blocks)
         ])
@@ -322,13 +302,13 @@ class YOLOV5CSPDarknet(BaseModule):
                 (1, 1024, 20, 20)
     """
     # From left to right:
-    # in_channels, out_channels, num_blocks, add_identity, use_spp/sppf
+    # in_channels, out_channels, num_blocks, use_spp/sppf
     arch_settings = {
-        'P5': [[64, 128, 3, True, False], [128, 256, 6, True, False],
-               [256, 512, 9, True, False], [512, 1024, 3, True, True]],
-        'P6': [[64, 128, 3, True, False], [128, 256, 9, True, False],
-               [256, 512, 9, True, False], [512, 768, 3, True, False],
-               [768, 1024, 3, False, True]]
+        'P5': [[64, 128, 3, False], [128, 256, 6, False],
+               [256, 512, 9, False], [512, 1024, 3, True]],
+        'P6': [[64, 128, 3, False], [128, 256, 9, False],
+               [256, 512, 9, False], [512, 768, 3, False],
+               [768, 1024, 3, True]]
     }
 
     def __init__(self,
@@ -366,7 +346,6 @@ class YOLOV5CSPDarknet(BaseModule):
         self.frozen_stages = frozen_stages
         self.use_depthwise = use_depthwise
         self.norm_eval = norm_eval
-        conv = DepthwiseSeparableConvModule if use_depthwise else ConvModule
         cfg = dict(conv_cfg=conv_cfg, norm_cfg=norm_cfg, act_cfg=act_cfg)
 
         # YOLOV5 tag-v6.0以后的版本所使用的FOCUS为6x6卷积，详情见：
@@ -387,7 +366,7 @@ class YOLOV5CSPDarknet(BaseModule):
         #     act_cfg=act_cfg)
         self.layers = ['stem']
 
-        for i, (in_channels, out_channels, num_blocks, add_identity,
+        for i, (in_channels, out_channels, num_blocks, 
                 use_spp) in enumerate(arch_setting):
             in_channels = int(in_channels * widen_factor)
             out_channels = int(out_channels * widen_factor)
@@ -411,7 +390,6 @@ class YOLOV5CSPDarknet(BaseModule):
                 in_channels,
                 out_channels,
                 num_blocks=num_blocks,
-                add_identity=add_identity,
                 use_depthwise=use_depthwise,
                 **cfg)
             stage.append(csp_block)

@@ -1,8 +1,5 @@
-
 import warnings
-
 import torch
-
 from ..builder import DETECTORS, build_backbone, build_head, build_neck
 from .base import BaseDetector
 
@@ -194,18 +191,3 @@ class TwoStageDetector(BaseDetector):
         return self.roi_head.aug_test(
             x, proposal_list, img_metas, rescale=rescale)
 
-    def onnx_export(self, img, img_metas):
-
-        img_shape = torch._shape_as_tensor(img)[2:]
-        img_metas[0]['img_shape_for_onnx'] = img_shape
-        x = self.extract_feat(img)
-        proposals = self.rpn_head.onnx_export(x, img_metas)
-        if hasattr(self.roi_head, 'onnx_export'):
-            return self.roi_head.onnx_export(x, proposals, img_metas)
-        else:
-            raise NotImplementedError(
-                f'{self.__class__.__name__} can not '
-                f'be exported to ONNX. Please refer to the '
-                f'list of supported models,'
-                f'https://mmdetection.readthedocs.io/en/latest/tutorials/pytorch2onnx.html#list-of-supported-models-exportable-to-onnx'  # noqa E501
-            )
