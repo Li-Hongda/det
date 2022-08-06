@@ -1,23 +1,78 @@
-
 import math
-
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule
 from mmcv.runner import BaseModule
-
 from ..builder import NECKS
-from ..utils import CSPLayer
 
+class CBLBlock(BaseModule):
+    """CBL(Conv-BN-LeakyReLU) Block used in YOLOV4 neck,differs from 
+    backbone.
+    Args:
+        in_channels (int): The input channels of the CSP layer.
+        out_channels (int): The output channels of the CSP layer.
+        conv_cfg (dict, optional): Config dict for convolution layer.
+            Default: None, which means using conv2d.
+        norm_cfg (dict): Config dict for normalization layer.
+            Default: dict(type='BN')
+        act_cfg (dict): Config dict for activation layer.
+            Default: dict(type='LeakyReLU')
+    """    
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 conv_cfg=None,
+                 norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
+                 act_cfg=dict(type='LeakyReLU'),
+                 init_cfg=None):
+        super().__init__(init_cfg)
+        cfg = dict(conv_cfg=conv_cfg, norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.conv1 = ConvModule(
+            in_channels,
+            out_channels,
+            1,
+            **cfg)
+        self.conv2 = ConvModule(
+            out_channels,
+            in_channels,
+            3,
+            stride=1,
+            padding=1,
+            **cfg)
+        self.conv3 = ConvModule(
+            in_channels,
+            out_channels,
+            1,
+            **cfg)
+        self.conv4 = ConvModule(
+            out_channels,
+            in_channels,
+            3,
+            stride=1,
+            padding=1,
+            **cfg)
+        self.conv5 = ConvModule(
+            in_channels,
+            out_channels,
+            1,
+            **cfg)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        out = self.conv5(x)
+        return out
 
 @NECKS.register_module()
-class YOLOXPAFPN(BaseModule):
-    """Path Aggregation Network used in YOLOX.
+class YOLOV4Neck(BaseModule):
+    """Path Aggregation Network used in YOLOV4.
 
     Args:
         in_channels (List[int]): Number of input channels per scale.
         out_channels (int): Number of output channels (used at each scale)
-        num_csp_blocks (int): Number of bottlenecks in CSPLayer. Default: 3
         use_depthwise (bool): Whether to depthwise separable convolution in
             blocks. Default: False
         upsample_cfg (dict): Config dict for interpolate layer.
@@ -27,20 +82,21 @@ class YOLOXPAFPN(BaseModule):
         norm_cfg (dict): Config dict for normalization layer.
             Default: dict(type='BN')
         act_cfg (dict): Config dict for activation layer.
-            Default: dict(type='Swish')
+            Default: dict(type='LeakyReLU')
         init_cfg (dict or list[dict], optional): Initialization config dict.
             Default: None.
+    Example:
+            Input: [n,52,52,128],[n,26,26,256],[n,13,13,512]
     """
 
     def __init__(self,
                  in_channels,
                  out_channels,
-                 num_csp_blocks=3,
                  use_depthwise=False,
                  upsample_cfg=dict(scale_factor=2, mode='nearest'),
                  conv_cfg=None,
                  norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
-                 act_cfg=dict(type='Swish'),
+                 act_cfg=dict(type='LeakyReLU'),
                  init_cfg=dict(
                      type='Kaiming',
                      layer='Conv2d',
@@ -48,12 +104,13 @@ class YOLOXPAFPN(BaseModule):
                      distribution='uniform',
                      mode='fan_in',
                      nonlinearity='leaky_relu')):
-        super(YOLOXPAFPN, self).__init__(init_cfg)
+        super(YOLOV4Neck, self).__init__(init_cfg)
         self.in_channels = in_channels
         self.out_channels = out_channels
-
         conv = DepthwiseSeparableConvModule if use_depthwise else ConvModule
-
+        cfg = dict(conv_cfg=conv_cfg, norm_cfg=norm_cfg, act_cfg=act_cfg)
+        #  in 128 256 512
+        #  out 128 256 512
         # build top-down blocks
         self.upsample = nn.Upsample(**upsample_cfg)
         self.reduce_layers = nn.ModuleList()
@@ -64,19 +121,12 @@ class YOLOXPAFPN(BaseModule):
                     in_channels[idx],
                     in_channels[idx - 1],
                     1,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg))
+                    **cfg))
             self.top_down_blocks.append(
-                CSPLayer(
-                    in_channels[idx - 1] * 2,
+                CBLBlock(
+                    in_channels[idx],
                     in_channels[idx - 1],
-                    num_blocks=num_csp_blocks,
-                    add_identity=False,
-                    use_depthwise=use_depthwise,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg))
+                    **cfg))
 
         # build bottom-up blocks
         self.downsamples = nn.ModuleList()
@@ -85,34 +135,17 @@ class YOLOXPAFPN(BaseModule):
             self.downsamples.append(
                 conv(
                     in_channels[idx],
-                    in_channels[idx],
+                    in_channels[idx + 1],
                     3,
                     stride=2,
                     padding=1,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg))
+                    **cfg))
             self.bottom_up_blocks.append(
-                CSPLayer(
-                    in_channels[idx] * 2,
-                    in_channels[idx + 1],
-                    num_blocks=num_csp_blocks,
-                    add_identity=False,
-                    use_depthwise=use_depthwise,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg))
+                CBLBlock(
+                    in_channels[idx + 1] * 2,
+                    out_channels[idx + 1],
+                    **cfg))
 
-        self.out_convs = nn.ModuleList()
-        for i in range(len(in_channels)):
-            self.out_convs.append(
-                ConvModule(
-                    in_channels[i],
-                    out_channels,
-                    1,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg))
 
     def forward(self, inputs):
         """

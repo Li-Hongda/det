@@ -1,6 +1,5 @@
-
 import math
-
+from operator import truediv
 import torch
 import torch.nn as nn
 from mmcv.cnn import ConvModule, DepthwiseSeparableConvModule
@@ -171,7 +170,8 @@ class YOLOV4CSPBlock(BaseModule):
 
 
 class CBLBlock(BaseModule):
-    """CBL(Conv-BN-LeakyReLU) Block used in YOLOV4 backbone,differs from neck
+    """CBL(Conv-BN-LeakyReLU) Block used in YOLOV4 backbone, differs 
+    from neck.
 
     Args:
         in_channels (int): The input channels of the CSP layer.
@@ -202,7 +202,7 @@ class CBLBlock(BaseModule):
             out_channels,
             1024,
             3,
-            stride=2,
+            stride=1,
             padding=1,
             **cfg)
         self.conv3 = ConvModule(
@@ -256,15 +256,15 @@ class YOLOV4CSPDarknet(BaseModule):
         (1, 1024, 13, 13)
     """
     # 从左到右依次为:
-    # in_channels, out_channels, num_blocks, change_channel, use_spp
+    # in_channels, out_channels, num_blocks, change_channel, use_spp, add_conv
     # arch_settings = {
     #     'Standard': [[32, 64, 1, True, True], [64, 128, 2, False, False],
     #            [128, 256, 8, False, False], [256, 512, 8, False, False],
     #            [512, 1024, 4, False, False]]
     # }
-    arch_setting =[[32, 64, 1, True, False], [64, 128, 2, False, False],
-               [128, 256, 8, False, False], [256, 512, 8, False, False],
-               [512, 1024, 4, False, True]]
+    arch_setting =[[32, 64, 1, True, False, False], [64, 128, 2, False, False, False],
+               [128, 256, 8, False, False, True], [256, 512, 8, False, False, True],
+               [512, 1024, 4, False, True, False]]
 
     def __init__(self,
                 #  arch='Standard',
@@ -310,7 +310,7 @@ class YOLOV4CSPDarknet(BaseModule):
         self.layers = ['stem']
 
         for i, (in_channels, out_channels, num_blocks, change_channel,
-                use_spp) in enumerate(arch_setting):
+                use_spp, add_conv) in enumerate(arch_setting):
             stage = []
             csp_block = YOLOV4CSPBlock(
                 in_channels,
@@ -339,6 +339,13 @@ class YOLOV4CSPDarknet(BaseModule):
                     in_channels=out_channels * 2,
                     out_channels=out_channels // 2)
                 stage.append(conv2)
+            if add_conv:
+                conv_bridge = ConvModule(
+                    out_channels,
+                    in_channels,
+                    1,
+                    **cfg)
+                stage.append(conv_bridge)
             self.add_module(f'stage{i + 1}', nn.Sequential(*stage))
             self.layers.append(f'stage{i + 1}')
 
