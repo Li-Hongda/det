@@ -18,7 +18,7 @@ model = dict(
     test_cfg=dict(score_thr=0.01, nms=dict(type='nms', iou_threshold=0.65)))
 
 # dataset settings
-data_root = '/disk2/xiexingxing/dataset/coco/'
+data_root = 'data/coco/'
 dataset_type = 'CocoDataset'
 
 train_pipeline = [
