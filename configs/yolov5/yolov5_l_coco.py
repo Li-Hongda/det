@@ -5,24 +5,20 @@ img_scale = (640, 640)  # height, width
 # model settings
 model = dict(
     type='YOLOV5',
-    input_size=img_scale,
-    random_size_range=(15, 25),
-    random_size_interval=10,
-    backbone=dict(type='YOLOV5CSPDarknet', deepen_factor=0.33, widen_factor=0.5),
+    backbone=dict(type='YOLOV5CSPDarknet', deepen_factor=1.0, widen_factor=1.0),
     neck=dict(
         type='YOLOV5Neck',
         in_channels=[256, 512, 1024],
-        out_channels=[256, 512, 1024],
-        num_csp_blocks=1),
+        out_channels=[256, 512, 1024]),
     bbox_head=dict(
-        type='YOLOV5Head', num_classes=80, in_channels=128, feat_channels=128),
+        type='YOLOV5Head', num_classes=80, in_channels=[256, 512, 1024]),
     train_cfg=dict(assigner=dict(type='YOLOV5Assigner'),sampler=dict(type='YOLOV5Sampler')),
     # In order to align the source code, the threshold of the val phase is
     # 0.01, and the threshold of the test phase is 0.001.
     test_cfg=dict(score_thr=0.01, nms=dict(type='nms', iou_threshold=0.65)))
 
 # dataset settings
-data_root = 'data/coco/'
+data_root = '/disk2/xiexingxing/dataset/coco/'
 dataset_type = 'CocoDataset'
 
 train_pipeline = [
@@ -86,7 +82,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=8,
+    samples_per_gpu=2,
     workers_per_gpu=4,
     persistent_workers=True,
     train=train_dataset,

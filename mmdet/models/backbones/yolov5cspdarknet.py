@@ -233,12 +233,12 @@ class YOLOV5CSPBlock(BaseModule):
             padding=1,
             **cfg)
         self.long_conv = ConvModule(
-            in_channels,
+            out_channels,
             mid_channels,
             1,
             **cfg)
         self.short_conv = ConvModule(
-            in_channels,
+            out_channels,
             mid_channels,
             1,
             **cfg)
@@ -251,7 +251,6 @@ class YOLOV5CSPBlock(BaseModule):
         self.blocks = nn.Sequential(*[
             YOLOV5ResUnit(
                 mid_channels,
-                1.0,
                 use_depthwise,
                 **cfg) for _ in range(num_blocks)
         ])
@@ -354,6 +353,8 @@ class YOLOV5CSPDarknet(BaseModule):
             3,
             int(arch_setting[0][0] * widen_factor),
             6,
+            stride=2,
+            padding=2,
             **cfg)
 
         # 原始FOCUS模块
@@ -372,12 +373,19 @@ class YOLOV5CSPDarknet(BaseModule):
             out_channels = int(out_channels * widen_factor)
             num_blocks = max(round(num_blocks * deepen_factor), 1)
             stage = []
+            csp_block = YOLOV5CSPBlock(
+                in_channels,
+                out_channels,
+                num_blocks=num_blocks,
+                use_depthwise=use_depthwise,
+                **cfg)
+            stage.append(csp_block)
             if use_spp:
                 if use_sppf:
                     spp = SPPFBottleneck(
                         out_channels,
                         out_channels,
-                        kernel_sizes=5,
+                        kernel_size=5,
                         **cfg)
                 else:
                     spp = SPPBottleneck(
@@ -386,13 +394,6 @@ class YOLOV5CSPDarknet(BaseModule):
                         kernel_sizes=(5, 9, 13),
                         **cfg)
                 stage.append(spp)
-            csp_block = YOLOV5CSPBlock(
-                in_channels,
-                out_channels,
-                num_blocks=num_blocks,
-                use_depthwise=use_depthwise,
-                **cfg)
-            stage.append(csp_block)
             self.add_module(f'stage{i + 1}', nn.Sequential(*stage))
             self.layers.append(f'stage{i + 1}')
 

@@ -23,17 +23,13 @@ class YOLOV5Assigner(BaseAssigner):
     """
 
     def __init__(self,
-                 pos_iou_thr,
-                 neg_iou_thr,
                  min_pos_iou=.0,
                  gt_max_assign_all=True):
-        self.pos_iou_thr = pos_iou_thr
-        self.neg_iou_thr = neg_iou_thr
         self.min_pos_iou = min_pos_iou
         self.gt_max_assign_all = gt_max_assign_all
 
 
-    def assign(self, bboxes, box_responsible_flags, box_valid_flags, gt_bboxes, gt_labels=None):
+    def assign(self, bboxes, box_valid_flags, box_responsible_flags, gt_bboxes, gt_labels=None):
         """Assign gt to bboxes. The process is very much like the max iou
         assigner, except that positive samples are constrained within the cell
         that the gt boxes fell in.

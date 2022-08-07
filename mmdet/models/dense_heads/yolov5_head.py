@@ -22,7 +22,7 @@ from .dense_test_mixins import BBoxTestMixin
 
 @HEADS.register_module()
 class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
-    """Head head used in YOLOV7.
+    """Head head used in YOLOV4.
 
     Args:
         num_classes (int): Number of categories excluding the background
@@ -52,19 +52,9 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
         init_cfg (dict or list[dict], optional): Initialization config dict.
     """
 
-    # From left to right:
-    # use_auxhead
-    arch_settings = {
-        'L': False,
-        'M': True,
-        'S': True,
-        'X': True
-    }
-
     def __init__(self,
                  num_classes,
                  in_channels,
-                 arch='L',
                  anchor_generator=dict(
                      type='YOLOV5AnchorGenerator',
                      base_sizes=[[(10, 13), (16, 30), (33, 23)],
@@ -83,20 +73,16 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
-                     reduction='sum',
                      loss_weight=1.0),
                  loss_bbox=dict(
                      type='IoULoss',
                      mode='square',
                      eps=1e-16,
-                     reduction='sum',
                      loss_weight=5.0),
                  loss_obj=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
-                     reduction='sum',
                      loss_weight=1.0),
-                 loss_l1=dict(type='L1Loss', reduction='sum', loss_weight=1.0),
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=dict(
@@ -108,7 +94,6 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
                      nonlinearity='leaky_relu')):
 
         super().__init__(init_cfg=init_cfg)
-        arch_setting = self.arch_settings[arch]
         self.num_classes = num_classes
         self.cls_out_channels = num_classes
         self.in_channels = in_channels
@@ -133,7 +118,6 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
         self.test_cfg = test_cfg
         self.train_cfg = train_cfg
 
-        self.sampling = False
         if self.train_cfg:
             self.assigner = build_assigner(self.train_cfg.assigner)
             # sampling=False so use PseudoSampler
@@ -466,7 +450,7 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
                              device=gt_bboxes.device).repeat(len(anchors[i])))
         concat_anchors = torch.cat(anchors)
         concat_responsible_flags = torch.cat(responsible_flags,dim=1)
-        concat_valid_flags = torch.cat(valid_flags)
+        concat_valid_flags = torch.cat(valid_flags,dim=1)
 
         anchor_strides = torch.cat(anchor_strides)
         # assert len(anchor_strides) == len(concat_anchors) == \

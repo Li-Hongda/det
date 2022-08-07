@@ -925,7 +925,7 @@ class YOLOV5AnchorGenerator(AnchorGenerator):
             # 按行进行索引
             gt_offsets_idx = (gt_offsets[:,1] * feat_w + gt_offsets[:,0]).view(-1,1)
             for idx in range(gt_offsets_idx.size(0)):
-                if gt_offsets_idx[idx] > feat_w * feat_h or gt_offsets_idx[idx] < 0:
+                if gt_offsets_idx[idx] > (feat_w * feat_h - 1) or gt_offsets_idx[idx] < 0:
                     gt_offsets_idx[idx] = torch.floor(gt_pairs)[idx, 1] * \
                         feat_w + torch.floor(gt_pairs)[idx, 0]
 
@@ -993,10 +993,10 @@ class YOLOV5AnchorGenerator(AnchorGenerator):
         gt_bboxes_h = (gt_bboxes[:, 3] - gt_bboxes[:, 1]).to(device)
         bboxes_w = (bboxes[:, 2] - bboxes[:, 0]).to(device)
         bboxes_h = (bboxes[:, 3] - bboxes[:, 1]).to(device)
-        scale_w = gt_bboxes_w.view(-1,1).expand(num_gt,num_base_anchors).contiguous() / \
-            bboxes_w.view(1,-1).expand(num_gt,num_base_anchors).contiguous()
-        scale_h = gt_bboxes_h.view(-1,1).expand(num_gt,num_base_anchors).contiguous() / \
-            bboxes_h.view(1,-1).expand(num_gt,num_base_anchors).contiguous()
+        scale_w = gt_bboxes_w.view(-1,1).repeat(1,num_base_anchors) / \
+            bboxes_w.repeat(num_gt,1)
+        scale_h = gt_bboxes_h.view(-1,1).repeat(1,num_base_anchors) / \
+            bboxes_h.repeat(num_gt,1)
         valid_grid = (torch.max(scale_w,1 / scale_w) < 4) & (torch.max(scale_h,1 / scale_h) < 4)
 
         valid_grid = valid_grid.repeat(1, feat_h * feat_w)

@@ -22,7 +22,7 @@ from .dense_test_mixins import BBoxTestMixin
 
 @HEADS.register_module()
 class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
-    """Head head used in YOLOV7.
+    """Head head used in YOLOV4.
 
     Args:
         num_classes (int): Number of categories excluding the background
