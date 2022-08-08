@@ -61,7 +61,7 @@ class YOLOV4ResUnit(BaseModule):
         super().__init__(init_cfg)
         assert in_channels == out_channels
         if change_channel:
-            mid_channels = out_channels / 2
+            mid_channels = out_channels // 2
         else:
             mid_channels = out_channels
         conv = DepthwiseSeparableConvModule if use_depthwise else ConvModule
@@ -122,7 +122,7 @@ class YOLOV4CSPBlock(BaseModule):
         if change_channel:
             mid_channels = out_channels
         else:
-            mid_channels = out_channels / 2 
+            mid_channels = out_channels // 2 
         self.main_conv = conv(
             in_channels = in_channels,
             out_channels = out_channels,
@@ -256,18 +256,12 @@ class YOLOV4CSPDarknet(BaseModule):
         (1, 1024, 13, 13)
     """
     # 从左到右依次为:
-    # in_channels, out_channels, num_blocks, change_channel, use_spp, add_conv
-    # arch_settings = {
-    #     'Standard': [[32, 64, 1, True, True], [64, 128, 2, False, False],
-    #            [128, 256, 8, False, False], [256, 512, 8, False, False],
-    #            [512, 1024, 4, False, False]]
-    # }
-    arch_setting =[[32, 64, 1, True, False, False], [64, 128, 2, False, False, False],
-               [128, 256, 8, False, False, True], [256, 512, 8, False, False, True],
-               [512, 1024, 4, False, True, False]]
+    # in_channels, out_channels, num_blocks, change_channel, use_spp
+    arch_setting =[[32, 64, 1, True, False], [64, 128, 2, False, False],
+               [128, 256, 8, False, False], [256, 512, 8, False, False],
+               [512, 1024, 4, False, True]]
 
     def __init__(self,
-                #  arch='Standard',
                  out_indices=(2, 3, 4),
                  frozen_stages=-1,
                  use_depthwise=False,
@@ -310,7 +304,7 @@ class YOLOV4CSPDarknet(BaseModule):
         self.layers = ['stem']
 
         for i, (in_channels, out_channels, num_blocks, change_channel,
-                use_spp, add_conv) in enumerate(arch_setting):
+                use_spp) in enumerate(arch_setting):
             stage = []
             csp_block = YOLOV4CSPBlock(
                 in_channels,
@@ -318,36 +312,32 @@ class YOLOV4CSPDarknet(BaseModule):
                 num_blocks=num_blocks,
                 change_channel=change_channel,
                 use_depthwise=use_depthwise,
-                conv_cfg=conv_cfg,
-                norm_cfg=norm_cfg,
-                act_cfg=act_cfg)
+                **cfg)
             stage.append(csp_block)
             if use_spp:
                 conv1 = CBLBlock(
                     in_channels=out_channels,
-                    out_channels=out_channels // 2)
+                    out_channels=out_channels // 2,
+                    **cfg)
                 stage.append(conv1)
                 spp = SPPBottleneck(
-                    out_channels,
-                    out_channels,
-                    kernel_sizes=5,
-                    conv_cfg=conv_cfg,
-                    norm_cfg=norm_cfg,
-                    act_cfg=act_cfg)
+                    kernel_sizes=(5, 9, 13))
                 stage.append(spp)
                 conv2 = CBLBlock(
                     in_channels=out_channels * 2,
-                    out_channels=out_channels // 2)
-                stage.append(conv2)
-            if add_conv:
-                conv_bridge = ConvModule(
-                    out_channels,
-                    in_channels,
-                    1,
+                    out_channels=out_channels // 2,
                     **cfg)
-                stage.append(conv_bridge)
+                stage.append(conv2)
             self.add_module(f'stage{i + 1}', nn.Sequential(*stage))
             self.layers.append(f'stage{i + 1}')
+        self.conv_bridges = nn.ModuleList()
+        for i in range(len(out_indices) - 1):
+            conv_bridge = ConvModule(
+                arch_setting[i+2][1],
+                arch_setting[i+2][0],
+                1,
+                **cfg)
+            self.conv_bridges.append(conv_bridge)
 
     def _freeze_stages(self):
         if self.frozen_stages >= 0:
@@ -372,4 +362,6 @@ class YOLOV4CSPDarknet(BaseModule):
             x = layer(x)
             if i in self.out_indices:
                 outs.append(x)
+        outs[0] = self.conv_bridges[0](outs[0])
+        outs[1] = self.conv_bridges[1](outs[1])
         return tuple(outs)
