@@ -28,75 +28,51 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
         num_classes (int): Number of categories excluding the background
             category.
         in_channels (int): Number of channels in the input feature map.
-        feat_channels (int): Number of hidden channels in stacking convs.
-            Default: 256
-        stacked_convs (int): Number of stacking convs of the head.
-            Default: 2.
         strides (tuple): Downsample factor of each feature map.
         use_depthwise (bool): Whether to depthwise separable convolution in
             blocks. Default: False
         dcn_on_last_conv (bool): If true, use dcn in the last layer of
             towers. Default: False.
-        conv_bias (bool | str): If specified as `auto`, it will be decided by
-            the norm_cfg. Bias of conv will be set as True if `norm_cfg` is
-            None, otherwise False. Default: "auto".
         conv_cfg (dict): Config dict for convolution layer. Default: None.
         norm_cfg (dict): Config dict for normalization layer. Default: None.
         act_cfg (dict): Config dict for activation layer. Default: None.
         loss_cls (dict): Config of classification loss.
         loss_bbox (dict): Config of localization loss.
         loss_obj (dict): Config of objectness loss.
-        loss_l1 (dict): Config of L1 loss.
         train_cfg (dict): Training config of anchor head.
         test_cfg (dict): Testing config of anchor head.
         init_cfg (dict or list[dict], optional): Initialization config dict.
     """
 
-    # From left to right:
-    # use_auxhead
-    arch_settings = {
-        'L': False,
-        'M': True,
-        'S': True,
-        'X': True
-    }
-
     def __init__(self,
                  num_classes,
                  in_channels,
-                 arch='L',
                  anchor_generator=dict(
-                     type='YOLOV5AnchorGenerator',
-                     base_sizes=[[(10, 13), (16, 30), (33, 23)],
-                                 [(30, 61), (62, 45), (59, 119)],
-                                 [(116, 90), (156, 198), (373, 326)]],
+                     type='YOLOV4AnchorGenerator',
+                     base_sizes=[[(12, 16), (19, 36), (40, 28)],
+                                 [(36, 75), (76, 55), (72, 146)],
+                                 [(142, 110), (182, 243), (459, 401)]],
                      strides=[8, 16, 32]),
                  bbox_coder=dict(type='YOLOV5BBoxCoder'),
                  strides=[8, 16, 32],
                  one_hot_smoother=0.,
                  use_depthwise=False,
                  dcn_on_last_conv=False,
-                 conv_bias='auto',
                  conv_cfg=None,
                  norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
-                 act_cfg=dict(type='Swish'),
+                 act_cfg=dict(type='LeakyReLU'),
                  loss_cls=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
-                     reduction='sum',
                      loss_weight=1.0),
                  loss_bbox=dict(
-                     type='IoULoss',
-                     mode='square',
+                     type='CIoULoss',
                      eps=1e-16,
-                     reduction='sum',
                      loss_weight=5.0),
                  loss_obj=dict(
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
-                     reduction='sum',
                      loss_weight=1.0),
-                 loss_l1=dict(type='L1Loss', reduction='sum', loss_weight=1.0),
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=dict(
@@ -108,21 +84,14 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
                      nonlinearity='leaky_relu')):
 
         super().__init__(init_cfg=init_cfg)
-        arch_setting = self.arch_settings[arch]
         self.num_classes = num_classes
         self.cls_out_channels = num_classes
         self.in_channels = in_channels
         self.strides = strides
         self.use_depthwise = use_depthwise
         self.dcn_on_last_conv = dcn_on_last_conv
-        assert conv_bias == 'auto' or isinstance(conv_bias, bool)
-        self.conv_bias = conv_bias
         self.use_sigmoid_cls = True
         self.one_hot_smoother = one_hot_smoother
-
-        self.conv_cfg = conv_cfg
-        self.norm_cfg = norm_cfg
-        self.act_cfg = act_cfg
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
@@ -133,17 +102,34 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
         self.test_cfg = test_cfg
         self.train_cfg = train_cfg
 
-        self.sampling = False
         if self.train_cfg:
             self.assigner = build_assigner(self.train_cfg.assigner)
-            # sampling=False so use PseudoSampler
-            sampler_cfg = dict(self.train_cfg.sampler)
+            # use PseudoSampler
+            if hasattr(self.train_cfg, 'sampler'):
+                sampler_cfg = self.train_cfg.sampler
+            else:
+                sampler_cfg = dict(type='PseudoSampler')
             self.sampler = build_sampler(sampler_cfg, context=self)
         self.num_base_priors = self.prior_generator.num_base_priors[0]
         assert len(
             self.prior_generator.num_base_priors) == len(strides)
         self.fp16_enabled = False
-        self._init_layers()
+
+        cfg = dict(conv_cfg=conv_cfg, norm_cfg=norm_cfg, act_cfg=act_cfg)
+        self.convs_bridge = nn.ModuleList()
+        self.convs_pred = nn.ModuleList()
+        for i in range(self.num_levels):
+            conv_bridge = ConvModule(
+                self.in_channels[i],
+                self.in_channels[i] * 2,
+                3,
+                padding=1,
+                **cfg)
+            conv_pred = nn.Conv2d(self.in_channels[i] * 2,
+                                  self.num_base_priors * self.num_attrib, 1)
+
+            self.convs_bridge.append(conv_bridge)
+            self.convs_pred.append(conv_pred)
 
     @property
     def num_levels(self):
@@ -155,14 +141,6 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
         objectness (1) + num_classes"""
 
         return 5 + self.num_classes
-
-
-    def _init_layers(self):
-        self.convs_pred = nn.ModuleList()
-        for i in range(self.num_levels):
-            conv_pred = nn.Conv2d(self.in_channels[i],
-                                self.num_base_priors * self.num_attrib, 1)
-            self.convs_pred.append(conv_pred)
 
     def init_weights(self):
         for m in self.modules():
@@ -196,6 +174,7 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
         pred_maps = []
         for i in range(self.num_levels):
             x = feats[i]
+            x = self.convs_bridge[i](x)
             pred_map = self.convs_pred[i](x)
             pred_maps.append(pred_map)
         return tuple(pred_maps),
@@ -340,16 +319,10 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
             responsible_flag_list.append(
                 self.prior_generator.responsible_flags(featmap_sizes,
                                                        gt_bboxes[img_id],
-                                                       pred_maps[0].device))
-        valid_flag_list = []
-        for img_id in range(len(img_metas)):
-            valid_flag_list.append(
-                self.prior_generator.valid_flags(featmap_sizes,
-                                                       gt_bboxes[img_id],
-                                                       pred_maps[0].device))                                                
+                                                       pred_maps[0].device))                                            
 
         target_maps_list, neg_maps_list = self.get_targets(
-            anchor_list, valid_flag_list, responsible_flag_list, gt_bboxes, gt_labels)
+            anchor_list, responsible_flag_list, gt_bboxes, gt_labels)
 
         losses_cls, losses_obj, losses_bbox = multi_apply(
             self.loss_single, pred_maps, target_maps_list, neg_maps_list)
@@ -398,11 +371,11 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
             pred_label, target_label, weight=pos_mask)
         loss_obj = self.loss_obj(
             pred_obj, target_obj, weight=pos_and_neg_mask)
-        loss_bbox = self.loss_bbox(pred_bbox, target_bbox, weight=pos_mask.expand(pos_mask.size(0),pos_mask.size(1),4))
+        loss_bbox = self.loss_bbox(pred_bbox.contiguous().view(-1, 4), target_bbox.contiguous().view(-1, 4), weight=pos_mask.expand(pos_mask.size(0),pos_mask.size(1),4).contiguous().view(-1, 4))
 
         return loss_cls, loss_obj, loss_bbox
 
-    def get_targets(self, anchor_list, valid_flag_list, responsible_flag_list, gt_bboxes_list,
+    def get_targets(self, anchor_list, responsible_flag_list, gt_bboxes_list,
                     gt_labels_list):
         """Compute target maps for anchors in multiple images.
 
@@ -428,7 +401,7 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
         num_level_anchors = [anchors.size(0) for anchors in anchor_list[0]]
 
         results = multi_apply(self._get_targets_single, anchor_list,
-                              valid_flag_list, responsible_flag_list,
+                              responsible_flag_list,
                               gt_bboxes_list, gt_labels_list)
 
         all_target_maps, all_neg_maps = results
@@ -439,7 +412,7 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
         return target_maps_list, neg_maps_list
 
     @torch.no_grad()
-    def _get_targets_single(self, anchors, valid_flags, responsible_flags, gt_bboxes,
+    def _get_targets_single(self, anchors, responsible_flags, gt_bboxes,
                             gt_labels):
         """Generate matching bounding box prior and converted GT.
 
@@ -466,13 +439,11 @@ class YOLOV4Head(BaseDenseHead, BBoxTestMixin):
                              device=gt_bboxes.device).repeat(len(anchors[i])))
         concat_anchors = torch.cat(anchors)
         concat_responsible_flags = torch.cat(responsible_flags,dim=1)
-        concat_valid_flags = torch.cat(valid_flags)
 
         anchor_strides = torch.cat(anchor_strides)
         # assert len(anchor_strides) == len(concat_anchors) == \
             #    len(concat_responsible_flags)
         assign_result = self.assigner.assign(concat_anchors,
-                                             concat_valid_flags,
                                              concat_responsible_flags,
                                              gt_bboxes)
         sampling_result = self.sampler.sample(assign_result, concat_anchors,

@@ -28,25 +28,17 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
         num_classes (int): Number of categories excluding the background
             category.
         in_channels (int): Number of channels in the input feature map.
-        feat_channels (int): Number of hidden channels in stacking convs.
-            Default: 256
-        stacked_convs (int): Number of stacking convs of the head.
-            Default: 2.
         strides (tuple): Downsample factor of each feature map.
         use_depthwise (bool): Whether to depthwise separable convolution in
             blocks. Default: False
         dcn_on_last_conv (bool): If true, use dcn in the last layer of
             towers. Default: False.
-        conv_bias (bool | str): If specified as `auto`, it will be decided by
-            the norm_cfg. Bias of conv will be set as True if `norm_cfg` is
-            None, otherwise False. Default: "auto".
         conv_cfg (dict): Config dict for convolution layer. Default: None.
         norm_cfg (dict): Config dict for normalization layer. Default: None.
         act_cfg (dict): Config dict for activation layer. Default: None.
         loss_cls (dict): Config of classification loss.
         loss_bbox (dict): Config of localization loss.
         loss_obj (dict): Config of objectness loss.
-        loss_l1 (dict): Config of L1 loss.
         train_cfg (dict): Training config of anchor head.
         test_cfg (dict): Testing config of anchor head.
         init_cfg (dict or list[dict], optional): Initialization config dict.
@@ -66,7 +58,6 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
                  one_hot_smoother=0.,
                  use_depthwise=False,
                  dcn_on_last_conv=False,
-                 conv_bias='auto',
                  conv_cfg=None,
                  norm_cfg=dict(type='BN', momentum=0.03, eps=0.001),
                  act_cfg=dict(type='Swish'),
@@ -100,8 +91,6 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
         self.strides = strides
         self.use_depthwise = use_depthwise
         self.dcn_on_last_conv = dcn_on_last_conv
-        assert conv_bias == 'auto' or isinstance(conv_bias, bool)
-        self.conv_bias = conv_bias
         self.use_sigmoid_cls = True
         self.one_hot_smoother = one_hot_smoother
 
@@ -120,8 +109,11 @@ class YOLOV5Head(BaseDenseHead, BBoxTestMixin):
 
         if self.train_cfg:
             self.assigner = build_assigner(self.train_cfg.assigner)
-            # sampling=False so use PseudoSampler
-            sampler_cfg = dict(self.train_cfg.sampler)
+            # use PseudoSampler
+            if hasattr(self.train_cfg, 'sampler'):
+                sampler_cfg = self.train_cfg.sampler
+            else:
+                sampler_cfg = dict(type='PseudoSampler')
             self.sampler = build_sampler(sampler_cfg, context=self)
         self.num_base_priors = self.prior_generator.num_base_priors[0]
         assert len(
